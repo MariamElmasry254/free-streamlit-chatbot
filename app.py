@@ -1,109 +1,130 @@
-import os, json, time
-import requests
 import streamlit as st
+import requests
+import time
 
-st.set_page_config(page_title="Chatbot", page_icon="💬", layout="centered")
-st.title("💬 Messenger-Style Chatbot (Free)")
-
-# --------- Theme toggle ---------
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-toggle = st.toggle("🌗 Dark / Light Mode", value=(st.session_state.theme=="dark"))
-st.session_state.theme = "dark" if toggle else "light"
-
-DARK_CSS = """
-<style>
-body { background:#0e1117; color:#fff; }
-.user-bubble { background:#1f6feb; color:#fff; padding:10px 14px; margin:8px; max-width:70%;
-               border-radius:18px 18px 4px 18px; align-self:flex-end; }
-.bot-bubble  { background:#2d333b; color:#fff; padding:10px 14px; margin:8px; max-width:70%;
-               border-radius:18px 18px 18px 4px; align-self:flex-start; }
-.chat-wrap   { display:flex; flex-direction:column; }
-</style>
-"""
-LIGHT_CSS = """
-<style>
-body { background:#f5f5f5; color:#000; }
-.user-bubble { background:#0084ff; color:#fff; padding:10px 14px; margin:8px; max-width:70%;
-               border-radius:18px 18px 4px 18px; align-self:flex-end; }
-.bot-bubble  { background:#e4e6eb; color:#000; padding:10px 14px; margin:8px; max-width:70%;
-               border-radius:18px 18px 18px 4px; align-self:flex-start; }
-.chat-wrap   { display:flex; flex-direction:column; }
-</style>
-"""
-st.markdown(DARK_CSS if st.session_state.theme=="dark" else LIGHT_CSS, unsafe_allow_html=True)
-
-# --------- HF Inference API settings ---------
-HF_TOKEN = st.secrets.get("HF_TOKEN", "")
-MODEL = st.sidebar.selectbox(
-    "الموديل المستضاف (مجاني بحدود):",
-    ["Qwen/Qwen2.5-0.5B-Instruct", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"],
-    index=0,
+# =====================================
+# PAGE CONFIG + GLOBAL THEME
+# =====================================
+st.set_page_config(
+    page_title="Smart Chatbot",
+    layout="wide",
 )
-MAX_NEW_TOKENS = st.sidebar.slider("طول الرد", 32, 256, 160, 16)
-TEMPERATURE = st.sidebar.slider("Temperature", 0.0, 1.5, 0.7, 0.1)
-TOP_P = st.sidebar.slider("Top-p", 0.1, 1.0, 0.9, 0.05)
 
-st.caption("يعمل عبر Hugging Face Inference API لتقليل استهلاك الذاكرة في Streamlit Cloud.")
+# =====================================
+# Custom CSS (Professional Dashboard Style)
+# =====================================
+st.markdown("""
+<style>
+body {
+    background-color: #f7f9fc;
+    font-family: "Segoe UI", sans-serif;
+}
 
-API_URL = f"https://api-inference.huggingface.co/models/{MODEL}"
-HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+.header-title {
+    font-size: 40px;
+    font-weight: 700;
+    margin-bottom: -10px;
+    color: #1f2937;
+}
 
-def call_hf(prompt: str, retries: int = 3) -> str:
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": int(MAX_NEW_TOKENS),
-            "temperature": float(TEMPERATURE),
-            "top_p": float(TOP_P),
-            "return_full_text": False
-        }
-    }
-    for i in range(retries):
-        r = requests.post(API_URL, headers=HEADERS, json=payload, timeout=60)
+.subtext {
+    color: #6b7280;
+    margin-bottom: 25px;
+}
+
+.chat-card {
+    background-color: white;
+    padding: 18px 24px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+}
+
+.user-bubble {
+    background-color: #3b82f6;
+    padding: 12px 15px;
+    color: white;
+    max-width: 60%;
+    border-radius: 14px;
+    margin: 6px 0px 6px auto;
+    font-size: 16px;
+}
+
+.bot-bubble {
+    background-color: #e5e7eb;
+    padding: 12px 15px;
+    color: #111827;
+    max-width: 60%;
+    border-radius: 14px;
+    margin: 6px 0px;
+    font-size: 16px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# =====================================
+# HF API CALL (Light & Free)
+# =====================================
+HF_TOKEN = st.secrets.get("HF_TOKEN", "")
+HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
+MODEL = "google/flan-t5-base"
+
+def ask_inference(prompt):
+    url = f"https://api-inference.huggingface.co/models/{MODEL}"
+    payload = {"inputs": prompt}
+
+    for _ in range(3):  # retries
+        r = requests.post(url, headers=HEADERS, json=payload)
         if r.status_code == 503:
-            # model is warming up; wait and retry
-            time.sleep(3)
+            time.sleep(2)
             continue
         r.raise_for_status()
-        out = r.json()
-        if isinstance(out, list) and out and "generated_text" in out[0]:
-            return out[0]["generated_text"]
-        return json.dumps(out)[:300]
-    return "الخدمة مشغولة حاليًا، جرّبي بعد لحظات."
+        output = r.json()
+        if isinstance(output, list):
+            return output[0]["generated_text"]
+        return str(output)
+    return "الخدمة مشغولة حالياً."
 
-# --------- Chat state ---------
+
+# =====================================
+# UI HEADER
+# =====================================
+st.markdown('<div class="header-title">💬 Smart Chatbot</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtext">واجهة احترافية مستوحاة من Dashboard الخاصة بك.</div>', unsafe_allow_html=True)
+
+
+# =====================================
+# Chat State
+# =====================================
 if "history" not in st.session_state:
     st.session_state.history = []
 
-with st.container():
-    st.markdown("<div class='chat-wrap'>", unsafe_allow_html=True)
-    for role, msg in st.session_state.history:
-        klass = "user-bubble" if role == "user" else "bot-bubble"
-        st.markdown(f"<div class='{klass}'>{msg}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-user_msg = st.text_input("اكتبي رسالتك هنا…", placeholder="مثال: عرف نفسك باختصار")
+# =====================================
+# Chat Display
+# =====================================
+chat_area = st.container()
+
+with chat_area:
+    for role, msg in st.session_state.history:
+        if role == "user":
+            st.markdown(f"<div class='user-bubble'>{msg}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='bot-bubble'>{msg}</div>", unsafe_allow_html=True)
+
+
+# =====================================
+# User Input
+# =====================================
+user_msg = st.text_input("اكتب رسالتك هنا:", "")
+
 if user_msg:
     st.session_state.history.append(("user", user_msg))
-    prompt = f"انت مساعد ودود بترد بالعربي المختصر.\nUser: {user_msg}\nAssistant:"
-    with st.spinner("بيفكر…"):
-        try:
-            reply = call_hf(prompt) if HF_TOKEN else "من فضلك أضيفي HF_TOKEN في Secrets."
-        except Exception as e:
-            reply = f"حصل خطأ: {e}"
-    st.session_state.history.append(("bot", reply))
-    st.rerun()
 
-# أدوات إضافية
-col1, col2 = st.columns(2)
-if col1.button("🧹 مسح المحادثة"):
-    st.session_state.clear()
+    with st.spinner("جاري التفكير..."):
+        prompt = f"جاوب بالعربي الواضح: {user_msg}"
+        bot_reply = ask_inference(prompt)
+
+    st.session_state.history.append(("bot", bot_reply))
     st.rerun()
-if col2.download_button(
-    "⬇️ تنزيل المحادثة",
-    data="\n\n".join([f"{r.upper()}: {m}" for r, m in st.session_state.history]),
-    file_name="chat_history.txt",
-    mime="text/plain"
-):
-    pass
